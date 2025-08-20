@@ -2,19 +2,19 @@ from pathlib import Path
 from openai import OpenAI
 import pygame
 from dotenv import load_dotenv
+import io
 
-from services.speech_to_text import start_streaming
 from services.translate import generate_translations
 
 load_dotenv()
 
-def text_to_speech(text: str, output_file: str = "speech.mp3") -> str:
+
+def text_to_speech(text: str):
     """
     Convert text into speech using OpenAI TTS
-    and save it to a file.
+    and return raw audio bytes (no file saved).
     """
     client = OpenAI()
-    speech_file_path = Path(__file__).parent / output_file
 
     with client.audio.speech.with_streaming_response.create(
         model="gpt-4o-mini-tts",
@@ -25,27 +25,29 @@ def text_to_speech(text: str, output_file: str = "speech.mp3") -> str:
         Deliver it smoothly, as if reading a natural essay or sentence, not word by word.
         """,
     ) as response:
-        response.stream_to_file(speech_file_path)
+        audio_bytes = response.read()  # Get raw audio bytes
+        return audio_bytes
 
-    return str(speech_file_path)
 
-
-def play_audio(file_path: str):
-    """Play audio using pygame (works on Linux, Mac, Windows)."""
+def play_audio_bytes(audio_bytes: bytes):
+    """
+    Play audio from raw bytes in memory using pygame.
+    """
     try:
         pygame.mixer.init()
-        pygame.mixer.music.load(file_path)
+        audio_buffer = io.BytesIO(audio_bytes)
+        pygame.mixer.music.load(audio_buffer, "mp3")
         pygame.mixer.music.play()
         while pygame.mixer.music.get_busy():
             pygame.time.Clock().tick(10)
-        print(f"✅ Played audio: {file_path}")
+        print("✅ Played audio from memory")
     except Exception as e:
         print("❌ Audio playback error:", e)
 
 
 if __name__ == "__main__":
-    # Example: Test TTS directly
+    # Example: Translate and play without saving
     text = start_streaming()
     translation = generate_translations(text, "english", "french")
-    audio_file = text_to_speech(translation)
-    play_audio(audio_file)
+    audio_bytes = text_to_speech(translation)
+    play_audio_bytes(audio_bytes)

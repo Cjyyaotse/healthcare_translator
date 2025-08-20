@@ -1,5 +1,4 @@
 from langchain.chat_models import init_chat_model
-from services.speech_to_text import start_streaming
 from dotenv import load_dotenv
 from typing import Text
 
