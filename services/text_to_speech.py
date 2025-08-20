@@ -1,53 +1,38 @@
 from pathlib import Path
 from openai import OpenAI
-import pygame
-from dotenv import load_dotenv
-import io
-
+from services.speech_to_text import stream_audio_transcription_text
 from services.translate import generate_translations
+from dotenv import load_dotenv
 
 load_dotenv()
 
-
-def text_to_speech(text: str):
+def text_to_speech(text: str, output_file: str, voice: str = "coral", model: str = "gpt-4o-mini-tts"):
+    instructions = "Speak in a cheerful and positive tone."
     """
-    Convert text into speech using OpenAI TTS
-    and return raw audio bytes (no file saved).
+    Convert text to spoken audio and save as an MP3 file.
+
+    Args:
+        text (str): Text input to convert to speech.
+        output_file (str): Path to save the generated audio file.
+        voice (str): Voice name to use for TTS (default "coral").
+        model (str): TTS model name (default "gpt-4o-mini-tts").
+        instructions (str): Optional instructions to control speech style/tone.
     """
     client = OpenAI()
+    output_path = Path(output_file)
 
     with client.audio.speech.with_streaming_response.create(
-        model="gpt-4o-mini-tts",
-        voice="coral",
+        model=model,
+        voice=voice,
         input=text,
-        instructions="""Read the text below in a cheerful and positive tone.
-        Preserve the original language of the text.
-        Deliver it smoothly, as if reading a natural essay or sentence, not word by word.
-        """,
+        instructions=instructions,
     ) as response:
-        audio_bytes = response.read()  # Get raw audio bytes
-        return audio_bytes
+        response.stream_to_file(output_path)
+    print(f"Audio saved to {output_path}")
 
-
-def play_audio_bytes(audio_bytes: bytes):
-    """
-    Play audio from raw bytes in memory using pygame.
-    """
-    try:
-        pygame.mixer.init()
-        audio_buffer = io.BytesIO(audio_bytes)
-        pygame.mixer.music.load(audio_buffer, "mp3")
-        pygame.mixer.music.play()
-        while pygame.mixer.music.get_busy():
-            pygame.time.Clock().tick(10)
-        print("✅ Played audio from memory")
-    except Exception as e:
-        print("❌ Audio playback error:", e)
-
-
+# Example usage
 if __name__ == "__main__":
-    # Example: Translate and play without saving
-    text = start_streaming()
-    translation = generate_translations(text, "english", "french")
-    audio_bytes = text_to_speech(translation)
-    play_audio_bytes(audio_bytes)
+    text = "Today is a wonderful day to build something people love!"
+    output_path = "recordings/output_speech.mp3"
+
+    text_to_speech(text, output_path)

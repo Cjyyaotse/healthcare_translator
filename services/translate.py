@@ -1,6 +1,7 @@
 from langchain.chat_models import init_chat_model
 from dotenv import load_dotenv
 from typing import Text
+from services.speech_to_text import stream_audio_transcription_text
 
 load_dotenv()
 
@@ -19,6 +20,12 @@ def generate_translations(text, input_language, output_language):
 
 # Example usage:
 if __name__ == "__main__":
-    text = start_streaming()
-    translation = generate_translations(text, "french", "english")
+    full_transcription = []
+    for chunk in stream_audio_transcription_text("recordings/output.wav"):
+        #print(chunk, end="", flush=True)
+        full_transcription.append(chunk)
+
+    text= "".join(full_transcription)
+
+    translation = generate_translations(text, "english", "fr")
     print("Transcript:", translation)

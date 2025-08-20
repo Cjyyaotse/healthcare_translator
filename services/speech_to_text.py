@@ -1,70 +1,52 @@
-import io
-import threading
-import sounddevice as sd
-import numpy as np
-import wavio
 from openai import OpenAI
 from dotenv import load_dotenv
-from datetime import datetime
-import os
 
 load_dotenv()
-client = OpenAI()
 
-# Globals
-recording_flag = [False]
-frames = []
-stream = None
-recording_thread = None
+def stream_audio_transcription_text(audio_file_path, model="gpt-4o-mini-transcribe"):
+    """
+    Stream transcription text content from an audio file using OpenAI API,
+    yield chunks of transcription text, and finally return full text.
 
-CHANNELS = 1
-RATE = 44100
+    Args:
+        audio_file_path (str): Local path to audio file.
+        model (str): Model name to use for transcription (default: gpt-4o-mini-transcribe).
 
+    Yields:
+        str: Streamed chunks of transcription text content only.
 
-def start_recording():
-    global recording_flag, frames, stream
-    frames = []
-    recording_flag[0] = True
+    Returns:
+        str: Full concatenated transcription text after streaming completes.
+    """
+    client = OpenAI()
 
-    def callback(indata, frames_count, time, status):
-        if recording_flag[0]:
-            frames.append(indata.copy())
+    full_text = ""
+    with open(audio_file_path, "rb") as audio_file:
+        stream = client.audio.transcriptions.create(
+            model=model,
+            file=audio_file,
+            response_format="text",
+            stream=True,
+        )
+        for event in stream:
+            if hasattr(event, "type") and event.type == "transcript.text.delta":
+                text_chunk = event.delta
+                full_text += text_chunk
+                yield text_chunk
 
-    stream = sd.InputStream(
-        samplerate=RATE,
-        channels=CHANNELS,
-        dtype='int16',
-        callback=callback
-    )
-    stream.start()
-    print("🎙️ Recording started...")
+    return full_text
 
+# Example usage
+if __name__ == "__main__":
+    audio_path = "recordings/output.wav"
+    
+    # To both stream and get full text at the end:
+    streamer = stream_audio_transcription_text(audio_path)
+    
+    full_transcription = []
+    for chunk in stream_audio_transcription_text(audio_path):
+        print(chunk, end="", flush=True)
+        full_transcription.append(chunk)
 
-def stop_recording():
-    global recording_flag, frames, stream
-    if not recording_flag[0]:
-        return ""
-
-    print("🛑 Stopping recording...")
-    recording_flag[0] = False
-    stream.stop()
-    stream.close()
-
-    # Combine all frames
-    audio_data = np.concatenate(frames, axis=0)
-
-    # In-memory WAV buffer for OpenAI
-    wav_buffer = io.BytesIO()
-    wavio.write(wav_buffer, audio_data, RATE, sampwidth=2)
-    wav_buffer.seek(0)
-    wav_buffer.name = "speech.wav"
-
-    print("⏳ Transcribing...")
-    transcript = client.audio.transcriptions.create(
-        model="gpt-4o-transcribe",
-        file=wav_buffer,
-        #language="en"
-    )
-
-    print("✅ Transcript:", transcript.text)
-    return transcript.text
+    full_text = "".join(full_transcription)
+    print(full_text)

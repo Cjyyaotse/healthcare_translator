@@ -12,3 +12,4 @@ uvicorn[standard]
 websockets==15.0.1
 sounddevice
 wavio
+python-multipart
