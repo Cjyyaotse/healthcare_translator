@@ -19,8 +19,6 @@ recording_thread = None
 
 CHANNELS = 1
 RATE = 44100
-OUTPUT_DIR = "recordings"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
 def start_recording():
@@ -54,12 +52,6 @@ def stop_recording():
 
     # Combine all frames
     audio_data = np.concatenate(frames, axis=0)
-
-    # Save audio to disk
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = os.path.join(OUTPUT_DIR, f"recording_{timestamp}.wav")
-    wavio.write(filename, audio_data, RATE, sampwidth=2)
-    print(f"💾 Audio saved to {filename}")
 
     # In-memory WAV buffer for OpenAI
     wav_buffer = io.BytesIO()
