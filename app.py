@@ -2,6 +2,7 @@ from fastapi import FastAPI, UploadFile, File, Form, Response, HTTPException
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.routing import APIRouter
 from typing import AsyncGenerator
+from fastapi.middleware.cors import CORSMiddleware
 
 from services.speech_to_text import stream_audio_transcription_text
 from services.translate import generate_translations
@@ -10,8 +11,22 @@ from services.text_to_speech import text_to_speech
 import tempfile
 from pathlib import Path
 import os
+# Allow your frontend origins
+origins = [
+    "http://localhost:5173",  # Vite/React dev server
+    "http://127.0.0.1:5173",  # just in case
+    "https://frontend-health-translator.vercel.app",  # production
+]
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ------------- Router for Speech-to-Text -------------
 stt_router = APIRouter()
@@ -51,7 +66,7 @@ async def speech_to_text_endpoint(audio: UploadFile = File(...)) -> StreamingRes
                     os.remove(temp_file_path)
             except Exception:
                 pass
-            
+
         #response.call_on_close(cleanup_tempfile)
 
     return response

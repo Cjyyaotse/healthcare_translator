@@ -9,3 +9,4 @@ uvicorn[standard]
 wavio
 python-multipart
 fastapi
+pydub
