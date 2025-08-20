@@ -49,7 +49,7 @@ def App():
             if recording and event["key"] == "Enter":
                 stop_recording_handler(event)
 
-        window = js_globals["window"]
+        window = globals["window"]
         window.addEventListener("keydown", on_keydown)
 
         def cleanup():
