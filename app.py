@@ -1,4 +1,5 @@
 import base64
+import threading
 from reactpy import component, html, use_state, run, use_effect
 from services.speech_to_text import start_recording, stop_recording
 from services.translate import generate_translations
@@ -22,10 +23,15 @@ def App():
         start_recording()
 
     def stop_recording_handler(event):
-        set_recording(False)
-        new_transcript = stop_recording()
-        set_transcript(new_transcript)
+        # Immediately update button text
+           set_recording(False)
 
+           # Run stop_recording (blocking) in a separate thread
+           def process_transcription():
+               new_transcript = stop_recording()
+               set_transcript(new_transcript)
+
+           threading.Thread(target=process_transcription).start()
     def translate(event):
         if transcript:
             new_translation = generate_translations(transcript, source_lang, target_lang)
@@ -139,21 +145,21 @@ def App():
             {"style": {"marginBottom": "20px"}},
             html.button(
                 {
-                    "on_click": start_recording_handler,
-                    "disabled": recording,
+                    "on_click": start_recording_handler if not recording else stop_recording_handler,
+                    "disabled": False,
                     "style": {
                         "padding": "12px 24px",
                         "borderRadius": "9999px",
                         "border": "none",
-                        "backgroundColor": "#3b82f6",
+                        "backgroundColor": "#3b82f6" if not recording else "#ef4444",
                         "color": "white",
                         "fontSize": "1rem",
                         "cursor": "pointer",
                         "boxShadow": "0 4px 6px rgba(0,0,0,0.1)"
                     }
                 },
-                "🎤 Start Recording"
-            ) if not recording else html.button(
+                "🎤 Start Recording" if not recording else "🛑 Stop Recording (Enter)"
+            )if not recording else html.button(
                 {
                     "on_click": stop_recording_handler,
                     "style": {
