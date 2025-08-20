@@ -1,79 +1,77 @@
-import pyaudio
 import io
 import threading
-import wave
+import sounddevice as sd
+import numpy as np
+import wavio
 from openai import OpenAI
 from dotenv import load_dotenv
+from datetime import datetime
+import os
 
 load_dotenv()
 client = OpenAI()
 
-# Globals to manage recording
-p = None
-stream = None
-frames = []
+# Globals
 recording_flag = [False]
+frames = []
+stream = None
 recording_thread = None
 
-FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
-CHUNK = 1024
+OUTPUT_DIR = "recordings"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
 def start_recording():
-    global p, stream, frames, recording_flag, recording_thread
-    p = pyaudio.PyAudio()
-    stream = p.open(
-        format=FORMAT,
-        channels=CHANNELS,
-        rate=RATE,
-        input=True,
-        frames_per_buffer=CHUNK
-    )
-
+    global recording_flag, frames, stream
     frames = []
     recording_flag[0] = True
 
-    def _record():
-        while recording_flag[0]:
-            data = stream.read(CHUNK)
-            frames.append(data)
+    def callback(indata, frames_count, time, status):
+        if recording_flag[0]:
+            frames.append(indata.copy())
 
-    recording_thread = threading.Thread(target=_record)
-    recording_thread.start()
+    stream = sd.InputStream(
+        samplerate=RATE,
+        channels=CHANNELS,
+        dtype='int16',
+        callback=callback
+    )
+    stream.start()
     print("🎙️ Recording started...")
 
 
 def stop_recording():
-    global p, stream, frames, recording_flag, recording_thread
+    global recording_flag, frames, stream
     if not recording_flag[0]:
         return ""
 
     print("🛑 Stopping recording...")
     recording_flag[0] = False
-    recording_thread.join()
-
-    stream.stop_stream()
+    stream.stop()
     stream.close()
-    p.terminate()
 
-    print("⏳ Transcribing...")
+    # Combine all frames
+    audio_data = np.concatenate(frames, axis=0)
 
-    # Wrap audio into WAV file in memory
+    # Save audio to disk
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = os.path.join(OUTPUT_DIR, f"recording_{timestamp}.wav")
+    wavio.write(filename, audio_data, RATE, sampwidth=2)
+    print(f"💾 Audio saved to {filename}")
+
+    # In-memory WAV buffer for OpenAI
     wav_buffer = io.BytesIO()
-    with wave.open(wav_buffer, "wb") as wf:
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(p.get_sample_size(FORMAT))
-        wf.setframerate(RATE)
-        wf.writeframes(b"".join(frames))
-
+    wavio.write(wav_buffer, audio_data, RATE, sampwidth=2)
     wav_buffer.seek(0)
     wav_buffer.name = "speech.wav"
 
+    print("⏳ Transcribing...")
     transcript = client.audio.transcriptions.create(
         model="gpt-4o-transcribe",
-        file=wav_buffer
+        file=wav_buffer,
+        #language="en"
     )
 
     print("✅ Transcript:", transcript.text)
