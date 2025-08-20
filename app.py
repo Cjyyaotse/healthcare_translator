@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Form, Response
+from fastapi import FastAPI, UploadFile, File, Form, Response, HTTPException
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.routing import APIRouter
 from typing import AsyncGenerator
@@ -9,6 +9,7 @@ from services.text_to_speech import text_to_speech
 
 import tempfile
 from pathlib import Path
+import os
 
 app = FastAPI()
 
@@ -18,22 +19,42 @@ stt_router = APIRouter()
 @stt_router.post("/speech-to-text")
 async def speech_to_text_endpoint(audio: UploadFile = File(...)) -> StreamingResponse:
     """
-    Accepts an audio file as upload and streams back transcription text chunks.
+    Accept audio upload and stream transcription text chunks.
     """
-    # Save the uploaded file to a temporary location for processing
-    suffix = Path(audio.filename).suffix or ".wav"
-    with tempfile.NamedTemporaryFile(delete=True, suffix=suffix) as temp_audio_file:
+
+    # Save uploaded file to a named temporary file that remains during function
+    try:
+        suffix = Path(audio.filename).suffix or ".wav"
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        temp_file_path = temp_file.name
+
+        # Save content asynchronously
         content = await audio.read()
-        temp_audio_file.write(content)
-        temp_audio_file.flush()
+        temp_file.write(content)
+        temp_file.flush()
+        temp_file.close()
 
         async def transcript_generator() -> AsyncGenerator[bytes, None]:
-            # stream_audio_transcription_text yields transcription chunks (str)
-            for chunk in stream_audio_transcription_text(temp_audio_file.name):
+            for chunk in stream_audio_transcription_text(temp_file_path):
                 yield chunk.encode("utf-8")
 
-        return StreamingResponse(transcript_generator(), media_type="text/plain")
+        response = StreamingResponse(transcript_generator(), media_type="text/plain")
 
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed processing audio: {exc}")
+
+    finally:
+        # Clean up the temp file after response is done sending
+        def cleanup_tempfile():
+            try:
+                if Path(temp_file_path).exists():
+                    os.remove(temp_file_path)
+            except Exception:
+                pass
+            
+        #response.call_on_close(cleanup_tempfile)
+
+    return response
 
 # ------------ Router for Translation ------------------
 translate_router = APIRouter()
@@ -61,8 +82,7 @@ tts_router = APIRouter()
 @tts_router.post("/text-to-speech")
 async def text_to_speech_endpoint(
     text: str = Form(...),
-    voice: str = Form("coral"),
-    model = "gpt-4o-mini-tts",
+    voice: str = Form("coral")
 ):
     """
     Accepts translated text and optional voice/model/instructions,
@@ -70,7 +90,7 @@ async def text_to_speech_endpoint(
     """
     # Use a temporary file to save generated audio
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio_file:
-        text_to_speech(text, temp_audio_file.name, voice=voice, model=model)
+        text_to_speech(text, temp_audio_file.name, voice=voice)
         temp_audio_file_path = temp_audio_file.name
 
     # Return the mp3 file as streaming response
