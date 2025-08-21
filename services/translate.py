@@ -27,5 +27,5 @@ if __name__ == "__main__":
 
     text= "".join(full_transcription)
 
-    translation = generate_translations(text, "english", "fr")
+    translation = generate_translations(text, "english", "twi")
     print("Transcript:", translation)
